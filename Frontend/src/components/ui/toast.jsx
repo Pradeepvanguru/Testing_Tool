@@ -23,7 +23,7 @@ const toastVariants = cva(
 	{
 		variants: {
 			variant: {
-				default: 'bg-dark border',
+				default: 'bg-background border',
 				destructive:
           'group destructive border-destructive bg-destructive text-destructive-foreground',
 			},
@@ -34,15 +34,16 @@ const toastVariants = cva(
 	},
 );
 
-const Toast = React.forwardRef(({ className, variant, ...props }, ref) => {
+const Toast = React.forwardRef(({ className, variant, dismiss, ...props }, ref) => {
 	return (
 		<ToastPrimitives.Root
 			ref={ref}
 			className={cn(toastVariants({ variant }), className)}
-			{...props}
+			{...props} // dismiss is filtered out
 		/>
 	);
 });
+
 Toast.displayName = ToastPrimitives.Root.displayName;
 
 const ToastAction = React.forwardRef(({ className, ...props }, ref) => (
