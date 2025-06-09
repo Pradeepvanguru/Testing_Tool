@@ -1,0 +1,2159 @@
+
+
+change the frontend process code, projectExplorer.js: when user give the right click on the the create project to show the releases with add icon of run,when user click the add icon then create the run of release and display the runs when user give right click on the releases,then click the runs
+pasted
+Edit
+I'll help you modify the frontend code to implement the requested functionality. Let me create the updated components with the new features:
+
+
+Updated ProjectExplorer.js
+Code 
+
+Updated TestCaseExplorer.js
+Code 
+
+
+
+Continue
+
+Edit
+
+Updated TestCaseExplorer.js
+Code ∙ Version 2 
+I've successfully updated both components according to your requirements. Here's a summary of the key changes:
+
+ProjectExplorer.js Updates:
+Right-click Context Menu: Added context menu functionality for projects and releases
+Runs Display: Now shows runs under releases with expand/collapse functionality
+Add Run Icon: Right-clicking on releases shows "Add Run" option with a plus icon
+Navigation: Clicking on runs redirects to TestCasesExplorer component
+Three-level Hierarchy: Projects → Releases → Runs structure implemented
+TestCaseExplorer.js Updates:
+Add TC Icon: Added "Add TC" button with plus icon for creating test cases
+Test Case Details View: Implemented a detailed table view when a test case is selected
+Add Row Functionality: Added "Add Row" button in the details table
+Run Icons: Each test case row has a run icon for individual execution
+Run All Button: Added "Run All Test Cases" button at the top right of the table
+Editable Table: Test case details can be edited inline with save/cancel options
+Key Features Added:
+Context Menus: Right-click functionality for better UX
+Modal Dialogs: Clean modal interfaces for creating runs and test cases
+Table Interface: Professional table layout for test case details
+Run Functionality: Individual and bulk test case execution
+Navigation Flow: Smooth transition between views
+Responsive Design: Maintains the existing responsive design patterns
+New Props Required:
+The parent component will need to pass additional props:
+
+onRunSelect: Handle run selection
+selectedRun: Currently selected run
+onNavigateToTestCases: Handle navigation to test case details
+The components now provide a complete workflow from project creation through test case execution with intuitive right-click menus and comprehensive table interfaces for managing test case details.
+change the frontend process code, Note:no need to show the add releases ,run,add Testcase,buttons in both frames only show the when user actions performed projectExplorer.js: dipalyed like folder structures the items when user give the right click on the the already created project then sh
+
+pasted
+
+
+import React, { useState, useEffect } from 'react';
+import { Plus, FolderPlus, ChevronRight, ChevronDown, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import * as api from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const ProjectExplorer = ({ 
+  onProjectSelect, 
+  onReleaseSelect, 
+  onRunSelect,
+  selectedProject, 
+  selectedRelease,
+  selectedRun,
+  onNavigateToTestCases 
+}) => {
+  const [projects, setProjects] = useState([]);
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [currentProjectForModal, setCurrentProjectForModal] = useState(null);
+  const [currentReleaseForRun, setCurrentReleaseForRun] = useState(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newReleaseName, setNewReleaseName] = useState('');
+  const [newRunName, setNewRunName] = useState('');
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, type: null, item: null });
+  
+  const { toast } = useToast();
+
+  // Context menu handlers
+  const handleRightClick = (e, type, item) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY,
+      type,
+      item
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ show: false, x: 0, y: 0, type: null, item: null });
+  };
+
+  // Click outside to close context menu
+  useEffect(() => {
+    const handleClickOutside = () => closeContextMenu();
+    if (contextMenu.show) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu.show]);
+
+  const handleReleaseClick = (project, release) => {
+    const releaseData = {
+      _id: release.ReleaseID,
+      ReleaseID: release.ReleaseID,
+      ReleaseName: release.ReleaseName,
+      ProjectID: project.ProjectID
+    };
+    onReleaseSelect(releaseData);
+    onProjectSelect(releaseData);
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const data = await api.getProjects();
+      setProjects(data.map(p => ({ 
+        ...p, 
+        expanded: false, 
+        releases: [], 
+        releasesLoaded: false 
+      })));
+    } catch (error) {
+      toast({ title: "Error fetching projects", description: error.message, variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) {
+      toast({ title: "Error", description: "Project name is required", variant: "destructive" });
+      return;
+    }
+    try {
+      const projectData = { ProjectName: newProjectName };
+      await api.createProject(projectData);
+      toast({ title: "Success", description: "Project created successfully!" });
+      setNewProjectName('');
+      setShowNewItemModal(false);
+      fetchProjects(); 
+    } catch (error) {
+      toast({ title: "Error creating project", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const fetchReleasesForProject = async (projectId) => {
+    try {
+      const releases = await api.getReleasesByProjectId(projectId);
+      const releasesWithRuns = await Promise.all(
+        releases.map(async (release) => {
+          try {
+            const runs = await api.getRunsByReleaseId(projectId, release.ReleaseID);
+            return { ...release, runs: runs || [], runsLoaded: true, expanded: false };
+          } catch (error) {
+            return { ...release, runs: [], runsLoaded: false, expanded: false };
+          }
+        })
+      );
+      
+      setProjects(prevProjects =>
+        prevProjects.map(p =>
+          p.ProjectID === projectId
+            ? { ...p, releases: releasesWithRuns, releasesLoaded: true, expanded: !p.expanded }
+            : p
+        )
+      );
+    } catch (error) {
+      toast({ title: "Error fetching releases", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const toggleProjectExpansion = (projectId) => {
+    const project = projects.find(p => p.ProjectID === projectId);
+    
+    if (project && !project.releasesLoaded) {
+      fetchReleasesForProject(projectId);
+    } else {
+      setProjects(prevProjects => prevProjects.map(p => 
+        p.ProjectID === projectId ? { ...p, expanded: !p.expanded } : p
+      ));
+    }
+  };
+
+  const toggleReleaseExpansion = (projectId, releaseId) => {
+    setProjects(prevProjects =>
+      prevProjects.map(project =>
+        project.ProjectID === projectId
+          ? {
+              ...project,
+              releases: project.releases.map(release =>
+                release.ReleaseID === releaseId
+                  ? { ...release, expanded: !release.expanded }
+                  : release
+              )
+            }
+          : project
+      )
+    );
+  };
+  
+  const handleCreateRelease = async () => {
+    if (!newReleaseName.trim() || !currentProjectForModal) {
+      toast({ title: "Error", description: "Release name and project selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRelease(currentProjectForModal.ProjectID, { ReleaseName: newReleaseName });
+      toast({ title: "Success", description: `Release "${newReleaseName}" created for project "${currentProjectForModal.ProjectName}"!` });
+      setNewReleaseName('');
+      setShowReleaseModal(false);
+      fetchReleasesForProject(currentProjectForModal.ProjectID);
+      setProjects(prev => prev.map(p => p.ProjectID === currentProjectForModal.ProjectID ? {...p, expanded: true} : p));
+    } catch (error) {
+      toast({ title: "Error creating release", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateRun = async () => {
+    if (!newRunName.trim() || !currentReleaseForRun) {
+      toast({ title: "Error", description: "Run name and release selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRun({
+        RunName: newRunName,
+        ReleaseID: currentReleaseForRun.ReleaseID,
+        ProjectID: currentReleaseForRun.ProjectID
+      });
+      toast({ title: "Success", description: `Run "${newRunName}" created successfully!` });
+      setNewRunName('');
+      setShowRunModal(false);
+      
+      // Refresh runs for the release
+      fetchReleasesForProject(currentReleaseForRun.ProjectID);
+    } catch (error) {
+      toast({ title: "Error creating run", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const openReleaseModal = (project) => {
+    setCurrentProjectForModal(project);
+    setShowReleaseModal(true);
+    closeContextMenu();
+  };
+
+  const openRunModal = (project, release) => {
+    setCurrentReleaseForRun({ ...release, ProjectID: project.ProjectID });
+    setShowRunModal(true);
+    closeContextMenu();
+  };
+
+  const handleRunClick = (project, release, run) => {
+    const runData = {
+      _id: run.RunID,
+      RunID: run.RunID,
+      RunName: run.RunName,
+      ReleaseID: release.ReleaseID,
+      ProjectID: project.ProjectID
+    };
+    onRunSelect(runData);
+    onNavigateToTestCases(runData); // Navigate to TestCasesExplorer
+  };
+
+  return (
+    <div className="p-1.5 md:p-2 scrollbar overflow-y-auto h-full">
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[11px] md:text-xs font-semibold text-white uppercase">Explorer</h2>
+        <Dialog open={showNewItemModal} onOpenChange={setShowNewItemModal}>
+          <DialogTrigger asChild>
+            <button className="icon-button" title="New Item"><Plus className="w-3 h-3" /></button>
+          </DialogTrigger>
+          <DialogContent className="modal-content sm:max-w-md">
+            <DialogHeader><DialogTitle className="text-white text-sm">Add New Project</DialogTitle></DialogHeader>
+            <Tabs defaultValue="project" className="w-full">
+              <TabsContent value="project" className="pt-3">
+                <div className="space-y-2.5">
+                  <div>
+                    <Label htmlFor="projectName" className="text-white text-[11px] md:text-xs">Project Name</Label>
+                    <Input id="projectName" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="input-field mt-0.5" placeholder="Enter project name" />
+                  </div>
+                </div>
+                <DialogFooter className="mt-3.5">
+                  <Button onClick={handleCreateProject} className="btn-primary text-[11px] md:text-xs w-full">Create Project</Button>
+                </DialogFooter>
+              </TabsContent>
+            </Tabs>
+            <Button onClick={() => setShowNewItemModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs mt-3 w-full">Cancel</Button>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="space-y-0.5">
+        {projects.map((project) => (
+          <div key={project.ProjectID} className="fade-in">
+            <div 
+              className={`folder-item flex items-center justify-between rounded-sm ${selectedProject?._id === project._id ? 'bg-gray-700' : ''}`}
+              onContextMenu={(e) => handleRightClick(e, 'project', project)}
+            >
+              <div className="flex items-center space-x-1 flex-grow min-w-0" onClick={() => onProjectSelect(project)}>
+                <button onClick={(e) => { e.stopPropagation(); toggleProjectExpansion(project.ProjectID); }} className="icon-button p-0">
+                  {project.expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </button>
+                <FolderPlus className="w-3 h-3 text-[#007ACC] shrink-0" />
+                <span className="text-[11px] md:text-xs text-white truncate" title={project.ProjectID}>{project.ProjectID}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openReleaseModal(project); }} className="release-button p-0.5 h-auto text-[5px]">
+                + Add Release
+              </Button>
+            </div>
+            
+            {project.expanded && project.releasesLoaded && (
+              <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                {project.releases.length === 0 && <p className="text-[10px] md:text-xs text-gray-500 pl-1.5 py-0.5">No releases yet.</p>}
+                {project.releases.map((release) => (
+                  <div key={release.ReleaseID}>
+                    <div
+                      className={`folder-item flex items-center justify-between rounded-sm ${selectedRelease?._id === release._id ? 'selected' : ''}`}
+                      onClick={() => onReleaseSelect(project, release)}
+                      onContextMenu={(e) => handleRightClick(e, 'release', { project, release })}
+                    >
+                      <div className="flex items-center space-x-1 flex-grow min-w-0">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleReleaseExpansion(project.ProjectID, release.ReleaseID); }} 
+                          className="icon-button p-0"
+                        >
+                          {release.expanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                        </button>
+                        <span className="text-[11px] md:text-xs text-gray-300 truncate" title={release.ReleaseID}>{release.ReleaseID}</span>
+                      </div>
+                      <button className="icon-button p-0.5" title="Add Run">
+                        <Plus className="w-2.5 h-2.5" onClick={(e) => { e.stopPropagation(); openRunModal(project, release); }} />
+                      </button>
+                    </div>
+                    
+                    {release.expanded && release.runs && (
+                      <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                        {release.runs.length === 0 && <p className="text-[10px] text-gray-500 pl-1.5 py-0.5">No runs yet.</p>}
+                        {release.runs.map((run) => (
+                          <div
+                            key={run.RunID}
+                            className={`folder-item flex items-center justify-between rounded-sm ${selectedRun?._id === run._id ? 'selected' : ''}`}
+                            onClick={() => handleRunClick(project, release, run)}
+                          >
+                            <span className="text-[10px] text-gray-400 truncate" title={run.RunName}>{run.RunName}</span>
+                            <button className="icon-button p-0.5" title="Run Test Cases">
+                              <Play className="w-2 h-2" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu.show && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'project' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openReleaseModal(contextMenu.item)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Release</span>
+            </button>
+          )}
+          {contextMenu.type === 'release' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openRunModal(contextMenu.item.project, contextMenu.item.release)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Run</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Release Modal */}
+      <Dialog open={showReleaseModal} onOpenChange={setShowReleaseModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Release for {currentProjectForModal?.ProjectName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new Release Name.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="releaseName" className="text-white text-[11px] md:text-xs">Release Name</Label>
+              <Input id="releaseName" value={newReleaseName} onChange={(e) => setNewReleaseName(e.target.value)} className="input-field mt-0.5" placeholder="Enter release name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowReleaseModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRelease} className="btn-primary text-[11px] md:text-xs">Create Release</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Modal */}
+      <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Run for {currentReleaseForRun?.ReleaseName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new test run.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="runName" className="text-white text-[11px] md:text-xs">Run Name</Label>
+              <Input id="runName" value={newRunName} onChange={(e) => setNewRunName(e.target.value)} className="input-field mt-0.5" placeholder="Enter run name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowRunModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRun} className="btn-primary text-[11px] md:text-xs">Create Run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ProjectExplorer;
+
+Pasted content
+
+40.97 KB •1,026 lines
+•
+Formatting may be inconsistent from source
+
+change the frontend process code,
+
+ Note:no need to  show the  add releases ,run,add Testcase,buttons in both frames only show the when user actions performed
+projectExplorer.js:
+dipalyed like folder structures the items
+when user give the right  click on the the already created project then show the hover panale with this features ,Resleases with "+" add icon at top right  of pannel,if no releases are there then display the meassge,when user click the add icon then create the run of release and display pannel  of  runs same here to create and displyed runs with run icon simimlar to releases pannel,when user click the run icon then to redirect  to the TestCasesExplorer component of TestCase Frame
+
+TestCaseExplorer.js:
+in the test case frame dispalay the TestCases  like folder staructure pannel when user hover the "run name" , "Run name"  beside  + icon at right top to create the TC and  display test case names in drop down items when hover the run name , when user to use that testcase to fetch details in table after word again same
+process of  to fetch the Testcase details in Tables section or frame with add icon  for adding rows and diplay the run  icon of each row and add run all Test Case button  at top right of table
+
+import React, { useState, useEffect } from 'react';
+import { Plus, FolderPlus, ChevronRight, ChevronDown, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import * as api from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const ProjectExplorer = ({ 
+  onProjectSelect, 
+  onReleaseSelect, 
+  onRunSelect,
+  selectedProject, 
+  selectedRelease,
+  selectedRun,
+  onNavigateToTestCases 
+}) => {
+  const [projects, setProjects] = useState([]);
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [currentProjectForModal, setCurrentProjectForModal] = useState(null);
+  const [currentReleaseForRun, setCurrentReleaseForRun] = useState(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newReleaseName, setNewReleaseName] = useState('');
+  const [newRunName, setNewRunName] = useState('');
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, type: null, item: null });
+  
+  const { toast } = useToast();
+
+  // Context menu handlers
+  const handleRightClick = (e, type, item) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY,
+      type,
+      item
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ show: false, x: 0, y: 0, type: null, item: null });
+  };
+
+  // Click outside to close context menu
+  useEffect(() => {
+    const handleClickOutside = () => closeContextMenu();
+    if (contextMenu.show) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu.show]);
+
+  const handleReleaseClick = (project, release) => {
+    const releaseData = {
+      _id: release.ReleaseID,
+      ReleaseID: release.ReleaseID,
+      ReleaseName: release.ReleaseName,
+      ProjectID: project.ProjectID
+    };
+    onReleaseSelect(releaseData);
+    onProjectSelect(releaseData);
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const data = await api.getProjects();
+      setProjects(data.map(p => ({ 
+        ...p, 
+        expanded: false, 
+        releases: [], 
+        releasesLoaded: false 
+      })));
+    } catch (error) {
+      toast({ title: "Error fetching projects", description: error.message, variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) {
+      toast({ title: "Error", description: "Project name is required", variant: "destructive" });
+      return;
+    }
+    try {
+      const projectData = { ProjectName: newProjectName };
+      await api.createProject(projectData);
+      toast({ title: "Success", description: "Project created successfully!" });
+      setNewProjectName('');
+      setShowNewItemModal(false);
+      fetchProjects(); 
+    } catch (error) {
+      toast({ title: "Error creating project", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const fetchReleasesForProject = async (projectId) => {
+    try {
+      const releases = await api.getReleasesByProjectId(projectId);
+      const releasesWithRuns = await Promise.all(
+        releases.map(async (release) => {
+          try {
+            const runs = await api.getRunsByReleaseId(projectId, release.ReleaseID);
+            return { ...release, runs: runs || [], runsLoaded: true, expanded: false };
+          } catch (error) {
+            return { ...release, runs: [], runsLoaded: false, expanded: false };
+          }
+        })
+      );
+      
+      setProjects(prevProjects =>
+        prevProjects.map(p =>
+          p.ProjectID === projectId
+            ? { ...p, releases: releasesWithRuns, releasesLoaded: true, expanded: !p.expanded }
+            : p
+        )
+      );
+    } catch (error) {
+      toast({ title: "Error fetching releases", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const toggleProjectExpansion = (projectId) => {
+    const project = projects.find(p => p.ProjectID === projectId);
+    
+    if (project && !project.releasesLoaded) {
+      fetchReleasesForProject(projectId);
+    } else {
+      setProjects(prevProjects => prevProjects.map(p => 
+        p.ProjectID === projectId ? { ...p, expanded: !p.expanded } : p
+      ));
+    }
+  };
+
+  const toggleReleaseExpansion = (projectId, releaseId) => {
+    setProjects(prevProjects =>
+      prevProjects.map(project =>
+        project.ProjectID === projectId
+          ? {
+              ...project,
+              releases: project.releases.map(release =>
+                release.ReleaseID === releaseId
+                  ? { ...release, expanded: !release.expanded }
+                  : release
+              )
+            }
+          : project
+      )
+    );
+  };
+  
+  const handleCreateRelease = async () => {
+    if (!newReleaseName.trim() || !currentProjectForModal) {
+      toast({ title: "Error", description: "Release name and project selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRelease(currentProjectForModal.ProjectID, { ReleaseName: newReleaseName });
+      toast({ title: "Success", description: `Release "${newReleaseName}" created for project "${currentProjectForModal.ProjectName}"!` });
+      setNewReleaseName('');
+      setShowReleaseModal(false);
+      fetchReleasesForProject(currentProjectForModal.ProjectID);
+      setProjects(prev => prev.map(p => p.ProjectID === currentProjectForModal.ProjectID ? {...p, expanded: true} : p));
+    } catch (error) {
+      toast({ title: "Error creating release", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateRun = async () => {
+    if (!newRunName.trim() || !currentReleaseForRun) {
+      toast({ title: "Error", description: "Run name and release selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRun({
+        RunName: newRunName,
+        ReleaseID: currentReleaseForRun.ReleaseID,
+        ProjectID: currentReleaseForRun.ProjectID
+      });
+      toast({ title: "Success", description: `Run "${newRunName}" created successfully!` });
+      setNewRunName('');
+      setShowRunModal(false);
+      
+      // Refresh runs for the release
+      fetchReleasesForProject(currentReleaseForRun.ProjectID);
+    } catch (error) {
+      toast({ title: "Error creating run", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const openReleaseModal = (project) => {
+    setCurrentProjectForModal(project);
+    setShowReleaseModal(true);
+    closeContextMenu();
+  };
+
+  const openRunModal = (project, release) => {
+    setCurrentReleaseForRun({ ...release, ProjectID: project.ProjectID });
+    setShowRunModal(true);
+    closeContextMenu();
+  };
+
+  const handleRunClick = (project, release, run) => {
+    const runData = {
+      _id: run.RunID,
+      RunID: run.RunID,
+      RunName: run.RunName,
+      ReleaseID: release.ReleaseID,
+      ProjectID: project.ProjectID
+    };
+    onRunSelect(runData);
+    onNavigateToTestCases(runData); // Navigate to TestCasesExplorer
+  };
+
+  return (
+    <div className="p-1.5 md:p-2 scrollbar overflow-y-auto h-full">
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[11px] md:text-xs font-semibold text-white uppercase">Explorer</h2>
+        <Dialog open={showNewItemModal} onOpenChange={setShowNewItemModal}>
+          <DialogTrigger asChild>
+            <button className="icon-button" title="New Item"><Plus className="w-3 h-3" /></button>
+          </DialogTrigger>
+          <DialogContent className="modal-content sm:max-w-md">
+            <DialogHeader><DialogTitle className="text-white text-sm">Add New Project</DialogTitle></DialogHeader>
+            <Tabs defaultValue="project" className="w-full">
+              <TabsContent value="project" className="pt-3">
+                <div className="space-y-2.5">
+                  <div>
+                    <Label htmlFor="projectName" className="text-white text-[11px] md:text-xs">Project Name</Label>
+                    <Input id="projectName" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="input-field mt-0.5" placeholder="Enter project name" />
+                  </div>
+                </div>
+                <DialogFooter className="mt-3.5">
+                  <Button onClick={handleCreateProject} className="btn-primary text-[11px] md:text-xs w-full">Create Project</Button>
+                </DialogFooter>
+              </TabsContent>
+            </Tabs>
+            <Button onClick={() => setShowNewItemModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs mt-3 w-full">Cancel</Button>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="space-y-0.5">
+        {projects.map((project) => (
+          <div key={project.ProjectID} className="fade-in">
+            <div 
+              className={`folder-item flex items-center justify-between rounded-sm ${selectedProject?._id === project._id ? 'bg-gray-700' : ''}`}
+              onContextMenu={(e) => handleRightClick(e, 'project', project)}
+            >
+              <div className="flex items-center space-x-1 flex-grow min-w-0" onClick={() => onProjectSelect(project)}>
+                <button onClick={(e) => { e.stopPropagation(); toggleProjectExpansion(project.ProjectID); }} className="icon-button p-0">
+                  {project.expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </button>
+                <FolderPlus className="w-3 h-3 text-[#007ACC] shrink-0" />
+                <span className="text-[11px] md:text-xs text-white truncate" title={project.ProjectID}>{project.ProjectID}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openReleaseModal(project); }} className="release-button p-0.5 h-auto text-[5px]">
+                + Add Release
+              </Button>
+            </div>
+            
+            {project.expanded && project.releasesLoaded && (
+              <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                {project.releases.length === 0 && <p className="text-[10px] md:text-xs text-gray-500 pl-1.5 py-0.5">No releases yet.</p>}
+                {project.releases.map((release) => (
+                  <div key={release.ReleaseID}>
+                    <div
+                      className={`folder-item flex items-center justify-between rounded-sm ${selectedRelease?._id === release._id ? 'selected' : ''}`}
+                      onClick={() => onReleaseSelect(project, release)}
+                      onContextMenu={(e) => handleRightClick(e, 'release', { project, release })}
+                    >
+                      <div className="flex items-center space-x-1 flex-grow min-w-0">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleReleaseExpansion(project.ProjectID, release.ReleaseID); }} 
+                          className="icon-button p-0"
+                        >
+                          {release.expanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                        </button>
+                        <span className="text-[11px] md:text-xs text-gray-300 truncate" title={release.ReleaseID}>{release.ReleaseID}</span>
+                      </div>
+                      <button className="icon-button p-0.5" title="Add Run">
+                        <Plus className="w-2.5 h-2.5" onClick={(e) => { e.stopPropagation(); openRunModal(project, release); }} />
+                      </button>
+                    </div>
+                    
+                    {release.expanded && release.runs && (
+                      <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                        {release.runs.length === 0 && <p className="text-[10px] text-gray-500 pl-1.5 py-0.5">No runs yet.</p>}
+                        {release.runs.map((run) => (
+                          <div
+                            key={run.RunID}
+                            className={`folder-item flex items-center justify-between rounded-sm ${selectedRun?._id === run._id ? 'selected' : ''}`}
+                            onClick={() => handleRunClick(project, release, run)}
+                          >
+                            <span className="text-[10px] text-gray-400 truncate" title={run.RunName}>{run.RunName}</span>
+                            <button className="icon-button p-0.5" title="Run Test Cases">
+                              <Play className="w-2 h-2" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu.show && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'project' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openReleaseModal(contextMenu.item)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Release</span>
+            </button>
+          )}
+          {contextMenu.type === 'release' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openRunModal(contextMenu.item.project, contextMenu.item.release)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Run</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Release Modal */}
+      <Dialog open={showReleaseModal} onOpenChange={setShowReleaseModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Release for {currentProjectForModal?.ProjectName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new Release Name.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="releaseName" className="text-white text-[11px] md:text-xs">Release Name</Label>
+              <Input id="releaseName" value={newReleaseName} onChange={(e) => setNewReleaseName(e.target.value)} className="input-field mt-0.5" placeholder="Enter release name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowReleaseModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRelease} className="btn-primary text-[11px] md:text-xs">Create Release</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Modal */}
+      <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Run for {currentReleaseForRun?.ReleaseName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new test run.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="runName" className="text-white text-[11px] md:text-xs">Run Name</Label>
+              <Input id="runName" value={newRunName} onChange={(e) => setNewRunName(e.target.value)} className="input-field mt-0.5" placeholder="Enter run name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowRunModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRun} className="btn-primary text-[11px] md:text-xs">Create Run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ProjectExplorer;
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import { Plus, Play, PlayIcon } from 'lucide-react';
+import * as api from '@/services/api';
+
+const TestCaseExplorer = ({
+  selectedRelease,
+  selectedRun,
+  onRunSelect,
+  onTestCaseSelect,
+  selectedTestCase,
+  panelRef,
+}) => {
+  const [runs, setRuns] = useState([]);
+  const [testCases, setTestCases] = useState([]);
+  const [testCaseDetails, setTestCaseDetails] = useState([]);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [showTestCaseModal, setShowTestCaseModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [newRunName, setNewRunName] = useState('');
+  const [newTestCaseName, setNewTestCaseName] = useState('');
+  const [currentView, setCurrentView] = useState('testcases'); // 'testcases' or 'details'
+  const { toast } = useToast();
+  
+  const [step, setStep] = useState('');
+  const [expected, setExpected] = useState('');
+  const [selectedAction, setSelectedAction] = useState('');
+
+  // Get consistent IDs regardless of property name
+  const projectId = selectedRelease?.ProjectID;
+  const releaseId = selectedRelease?.ReleaseID;
+
+  // Fetch Runs when release changes
+  useEffect(() => {
+    const fetchRuns = async () => {
+      if (projectId && releaseId) {
+        try {
+          const data = await api.getRunsByReleaseId(projectId, releaseId);
+          setRuns(data.map((r) => ({ ...r, testCases: [], testCasesLoaded: false })));
+        } catch (error) {
+          toast({
+            title: 'Error fetching runs',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setRuns([]);
+        }
+      } else {
+        setRuns([]);
+      }
+      setTestCases([]);
+    };
+
+    fetchRuns();
+  }, [projectId, releaseId, toast]);
+
+  // Fetch Test Cases when run changes
+  useEffect(() => {
+    const fetchTestCases = async () => {
+      if (selectedRun?._id) {
+        try {
+          const data = await api.getTestCasesByRunId(selectedRun.RunID);
+          setTestCases(data);
+        } catch (error) {
+          toast({
+            title: 'Error fetching test cases',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setTestCases([]);
+        }
+      } else {
+        setTestCases([]);
+      }
+    };
+
+    fetchTestCases();
+  }, [selectedRun, toast]);
+
+  // Fetch Test Case Details when testcase is selected
+  useEffect(() => {
+    const fetchTestCaseDetails = async () => {
+      if (selectedTestCase?.TestCaseID) {
+        try {
+          const data = await api.getTestCaseDetails(selectedTestCase.TestCaseID);
+          setTestCaseDetails(Array.isArray(data) ? data : [data]);
+          setCurrentView('details');
+        } catch (error) {
+          toast({
+            title: 'Error fetching test case details',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setTestCaseDetails([]);
+        }
+      }
+    };
+
+    if (selectedTestCase) {
+      fetchTestCaseDetails();
+    }
+  }, [selectedTestCase, toast]);
+
+  // Create new run
+  const handleCreateRun = async () => {
+    if (!newRunName.trim() || !projectId || !releaseId) {
+      toast({
+        title: 'Error',
+        description: 'Run name and release selection are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      await api.createRun({
+        RunName: newRunName,
+        ReleaseID: releaseId,
+        ProjectID: projectId
+      });
+      toast({ title: 'Success', description: 'Run created successfully!' });
+      setNewRunName('');
+      setShowRunModal(false);
+
+      const data = await api.getRunsByReleaseId(projectId, releaseId);
+      setRuns(data.map((r) => ({ ...r, testCases: [], testCasesLoaded: false })));
+    } catch (error) {
+      toast({ title: 'Error creating run', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // Create new test case
+  const handleCreateTestCase = async () => {
+    if (
+      !newTestCaseName.trim() ||
+      !step.trim() ||
+      !expected.trim() ||
+      !selectedAction ||
+      !selectedRun?.RunID
+    ) {
+      toast({
+        title: 'Error',
+        description: 'All fields are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const testCaseData = {
+      TestCaseName: newTestCaseName,
+      RunID: selectedRun.RunID,
+      step,
+      expected,
+      actions: selectedAction,
+    };
+
+    try {
+      await api.createTestCase(selectedRun.RunID, testCaseData);
+      toast({ title: 'Success', description: 'Test case created successfully!' });
+
+      setNewTestCaseName('');
+      setStep('');
+      setExpected('');
+      setSelectedAction('');
+      setShowTestCaseModal(false);
+
+      const data = await api.getTestCasesByRunId(selectedRun.RunID);
+      setTestCases(data);
+    } catch (error) {
+      toast({
+        title: 'Error creating test case',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Add new test case detail row
+  const handleAddDetailRow = () => {
+    const newRow = {
+      id: Date.now(), // temporary ID
+      step: '',
+      expected: '',
+      actions: '',
+      isNew: true
+    };
+    setTestCaseDetails([...testCaseDetails, newRow]);
+  };
+
+  // Update detail row
+  const handleUpdateDetailRow = (id, field, value) => {
+    setTestCaseDetails(prevDetails =>
+      prevDetails.map(detail =>
+        detail.id === id ? { ...detail, [field]: value } : detail
+      )
+    );
+  };
+
+  // Save detail row
+  const handleSaveDetailRow = async (detail) => {
+    if (!detail.step || !detail.expected || !detail.actions) {
+      toast({
+        title: 'Error',
+        description: 'All fields are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      if (detail.isNew) {
+        // Create new detail
+        const newDetail = {
+          TestCaseID: selectedTestCase.TestCaseID,
+          step: detail.step,
+          expected: detail.expected,
+          actions: detail.actions
+        };
+        await api.createTestCaseDetail(selectedTestCase.TestCaseID, newDetail);
+      } else {
+        // Update existing detail
+        await api.updateTestCaseDetail(detail.id, {
+          step: detail.step,
+          expected: detail.expected,
+          actions: detail.actions
+        });
+      }
+      
+      toast({ title: 'Success', description: 'Test case detail saved successfully!' });
+      
+      // Refresh details
+      const data = await api.getTestCaseDetails(selectedTestCase.TestCaseID);
+      setTestCaseDetails(Array.isArray(data) ? data : [data]);
+    } catch (error) {
+      toast({
+        title: 'Error saving test case detail',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Run single test case
+  const handleRunTestCase = async (testCase) => {
+    try {
+      await api.runTestCase(testCase.TestCaseID);
+      toast({ title: 'Success', description: `Test case "${testCase.TestCaseName}" is running!` });
+    } catch (error) {
+      toast({
+        title: 'Error running test case',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Run all test cases
+  const handleRunAllTestCases = async () => {
+    if (!selectedRun?.RunID) {
+      toast({
+        title: 'Error',
+        description: 'No run selected',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      await api.runAllTestCases(selectedRun.RunID);
+      toast({ title: 'Success', description: 'All test cases are running!' });
+    } catch (error) {
+      toast({
+        title: 'Error running all test cases',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <div className="p-2 md:p-2.5 scrollbar overflow-y-auto h-full" ref={panelRef}>
+      {currentView === 'testcases' ? (
+        <>
+          {/* Runs Section */}
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-[11px] font-semibold text-white uppercase">Runs</h2>
+            <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+              <DialogTrigger asChild>
+                <Button size="xs" className="btn-primary text-[11px] px-1.5 py-0.5 h-auto leading-tight" disabled={!selectedRelease}>
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="modal-content sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-white text-base">Create New Run</DialogTitle>
+                  <DialogDescription className="text-sm text-gray-400">
+                    Enter a name to create a new test run under the selected release.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2.5">
+                  <Label htmlFor="runName" className="text-white text-[11px]">
+                    Run Name
+                  </Label>
+                  <Input
+                    id="runName"
+                    value={newRunName}
+                    onChange={(e) => setNewRunName(e.target.value)}
+                    className="input-field mt-0.5 text-[11px]"
+                    placeholder="Enter run name"
+                    type="text"
+                    required
+                  />
+                </div>
+                <DialogFooter className="mt-3.5">
+                  <Button onClick={() => setShowRunModal(false)} variant="outline" className="btn-secondary text-[11px] px-2 py-1 h-auto leading-tight">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateRun} className="btn-primary text-[11px] px-2 py-1 h-auto leading-tight">
+                    Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="space-y-0.5 mb-3.5">
+            {selectedRelease ? (
+              runs.length > 0 ? (
+                runs.map((run) => (
+                  <div
+                    key={run.RunID}
+                    className={`test-case-item text-[11px] py-1 px-1.5 ${selectedRun?._id === run._id ? 'active' : ''}`}
+                    onClick={() => onRunSelect(run)}
+                  >
+                    <div className="font-medium truncate" title={run.RunName}>
+                      {run.RunName}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[11px] text-gray-500">No runs for this release.</p>
+              )
+            ) : (
+              <p className="text-[11px] text-gray-500">Select a release to see runs.</p>
+            )}
+          </div>
+
+          {/* Test Cases Section */}
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-[11px] font-semibold text-white uppercase">Test Cases</h2>
+            <div className="flex space-x-1">
+              <Dialog open={showTestCaseModal} onOpenChange={setShowTestCaseModal}>
+                <DialogTrigger asChild>
+                  <Button size="xs" className="btn-primary text-[11px] px-1.5 py-0.5 h-auto leading-tight" disabled={!selectedRun}>
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add TC
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="modal-content sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-white text-base">Create Test Case</DialogTitle>
+                    <DialogDescription className="text-sm text-gray-400">
+                      Fill the details to create a new test case under the selected run.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-2.5">
+                    <Label className="text-white text-[11px]">Test Case Name</Label>
+                    <Input value={newTestCaseName} onChange={(e) => setNewTestCaseName(e.target.value)} placeholder="Enter test case name" className="input-field text-[11px]" />
+
+                    <Label className="text-white text-[11px]">Step</Label>
+                    <Input value={step} onChange={(e) => setStep(e.target.value)} placeholder="Enter test step" className="input-field text-[11px]" />
+
+                    <Label className="text-white text-[11px]">Expected Result</Label>
+                    <Input value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="Enter expected result" className="input-field text-[11px]" />
+
+                    <Label className="text-white text-[11px]">Action</Label>
+                    <select value={selectedAction} onChange={(e) => setSelectedAction(e.target.value)} className="input-field w-full p-1 text-[11px] rounded bg-black border border-gray-600 text-white">
+                      <option value="">Select action</option>
+                      <option value="LAUNCHBROWSER">Launch Browser</option>
+                      <option value="CLICK">Click</option>
+                      <option value="ENTERTEXT">Enter Text</option>
+                      <option value="SELECTDROPDOWN">Select Dropdown</option>
+                      <option value="VERIFYTEXT">Verify Text</option>
+                      <option value="NAVIGATETO">Navigate To</option>
+                    </select>
+                  </div>
+
+                  <DialogFooter className="mt-3.5">
+                    <Button onClick={() => setShowTestCaseModal(false)} variant="outline" className="btn-secondary text-[11px] px-2 py-1 h-auto leading-tight">Cancel</Button>
+                    <Button onClick={handleCreateTestCase} className="btn-primary text-[11px] px-2 py-1 h-auto leading-tight">Create</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              
+              {selectedRun && testCases.length > 0 && (
+                <Button 
+                  size="xs" 
+                  className="btn-success text-[11px] px-1.5 py-0.5 h-auto leading-tight bg-green-600 hover:bg-green-700" 
+                  onClick={handleRunAllTestCases}
+                >
+                  <PlayIcon className="w-3 h-3 mr-1" />
+                  Run All
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-0.5">
+            {testCases.map((tc) => (
+              <div
+                key={tc.TestCaseID}
+                className={`test-case-item text-[11px] py-1 px-1.5 flex items-center justify-between ${selectedTestCase?._id === tc._id ? 'active' : ''}`}
+                onClick={() => onTestCaseSelect(tc)}
+              >
+                <div className="font-medium truncate flex-grow" title={tc.TestCaseName}>
+                  {tc.TestCaseID}
+                </div>
+                <button
+                  className="icon-button p-0.5 ml-2"
+                  title="Run Test Case"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRunTestCase(tc);
+                  }}
+                >
+                  <Play className="w-2.5 h-2.5 text-green-500" />
+                </button>
+              </div>
+            ))}
+            {!selectedRun && <p className="text-[11px] text-gray-500">Select a run to see test cases.</p>}
+            {selectedRun && testCases.length === 0 && <p className="text-[11px] text-gray-500">No test cases for this run.</p>}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Test Case Details Section */}
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center space-x-2">
+              <Button 
+                size="xs" 
+                variant="outline" 
+                className="btn-secondary text-[11px] px-1.5 py-0.5 h-auto leading-tight"
+                onClick={() => setCurrentView('testcases')}
+              >
+                ← Back
+              </Button>
+              <h2 className="text-[11px] font-semibold text-white uppercase">
+                Test Case Details - {selectedTestCase?.TestCaseName}
+              </h2>
+            </div>
+            <div className="flex space-x-1">
+              <Button 
+                size="xs" 
+                className="btn-primary text-[11px] px-1.5 py-0.5 h-auto leading-tight" 
+                onClick={handleAddDetailRow}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Row
+              </Button>
+              <Button 
+                size="xs" 
+                className="btn-success text-[11px] px-1.5 py-0.5 h-auto leading-tight bg-green-600 hover:bg-green-700" 
+                onClick={() => handleRunTestCase(selectedTestCase)}
+              >
+                <PlayIcon className="w-3 h-3 mr-1" />
+                Run All
+              </Button>
+            </div>
+          </div>
+
+          {/* Test Case Details Table */}
+          <div className="bg-gray-900 border border-gray-700 rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead className="bg-gray-800">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left text-white font-medium border-r border-gray-700">Step</th>
+                    <th className="px-2 py-1.5 text-left text-white font-medium border-r border-gray-700">Expected</th>
+                    <th className="px-2 py-1.5 text-left text-white font-medium border-r border-gray-700">Action</th>
+                    <th className="px-2 py-1.5 text-left text-white font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {testCaseDetails.map((detail, index) => (
+                    <TestCaseDetailRow
+                      key={detail.id || index}
+                      detail={detail}
+                      onUpdate={handleUpdateDetailRow}
+                      onSave={handleSaveDetailRow}
+                      onRun={() => handleRunTestCase(selectedTestCase)}
+                    />
+                  ))}
+                  {testCaseDetails.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="px-2 py-4 text-center text-gray-500">
+                        No test case details available. Click "Add Row" to add details.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Test Case Detail Row Component
+const TestCaseDetailRow = ({ detail, onUpdate, onSave, onRun }) => {
+  const [isEditing, setIsEditing] = useState(detail.isNew || false);
+  const [localDetail, setLocalDetail] = useState(detail);
+
+  const handleSave = () => {
+    onSave(localDetail);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setLocalDetail(detail);
+    setIsEditing(false);
+  };
+
+  const actionOptions = [
+    'LAUNCHBROWSER',
+    'CLICK',
+    'ENTERTEXT',
+    'SELECTDROPDOWN',
+    'VERIFYTEXT',
+    'NAVIGATETO'
+  ];
+
+  return (
+    <tr className="border-b border-gray-700 hover:bg-gray-800">
+      <td className="px-2 py-1.5 border-r border-gray-700">
+        {isEditing ? (
+          <Input
+            value={localDetail.step || ''}
+            onChange={(e) => {
+              const newDetail = { ...localDetail, step: e.target.value };
+              setLocalDetail(newDetail);
+              onUpdate(localDetail.id, 'step', e.target.value);
+            }}
+            className="input-field text-[10px] h-6"
+            placeholder="Enter step"
+          />
+        ) : (
+          <span className="text-gray-300">{detail.step}</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 border-r border-gray-700">
+        {isEditing ? (
+          <Input
+            value={localDetail.expected || ''}
+            onChange={(e) => {
+              const newDetail = { ...localDetail, expected: e.target.value };
+              setLocalDetail(newDetail);
+              onUpdate(localDetail.id, 'expected', e.target.value);
+            }}
+            className="input-field text-[10px] h-6"
+            placeholder="Enter expected result"
+          />
+        ) : (
+          <span className="text-gray-300">{detail.expected}</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 border-r border-gray-700">
+        {isEditing ? (
+          <select
+            value={localDetail.actions || ''}
+            onChange={(e) => {
+              const newDetail = { ...localDetail, actions: e.target.value };
+              setLocalDetail(newDetail);
+              onUpdate(localDetail.id, 'actions', e.target.value);
+            }}
+            className="input-field w-full text-[10px] h-6 bg-black border border-gray-600 text-white"
+          >
+            <option value="">Select action</option>
+            {actionOptions.map(action => (
+              <option key={action} value={action}>{action}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-gray-300">{detail.actions}</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5">
+        <div className="flex space-x-1">
+          {isEditing ? (
+            <>
+              <Button size="xs" className="btn-primary text-[10px] px-1.5 py-0.5 h-auto" onClick={handleSave}>
+                Save
+              </Button>
+              <Button size="xs" variant="outline" className="btn-secondary text-[10px] px-1.5 py-0.5 h-auto" onClick={handleCancel}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="xs" variant="outline" className="btn-secondary text-[10px] px-1.5 py-0.5 h-auto" onClick={() => setIsEditing(true)}>
+                Edit
+              </Button>
+              <button
+                className="icon-button p-0.5"
+                title="Run This Step"
+                onClick={onRun}
+              >
+                <Play className="w-2.5 h-2.5 text-green-500" />
+              </button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+export default TestCaseExplorer;
+
+
+----------------------------------------------------------------------------------------------------------------------------
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,DialogDescription  } from '@/components/ui/dialog';
+
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import * as api from '@/services/api';
+
+const TestCaseExplorer = ({selectedRelease,onRunSelect,onTestCaseSelect,selectedRun,selectedTestCase,panelRef,}) => {
+  const [runs, setRuns] = useState([]);
+  const [testCases, setTestCases] = useState([]);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [showTestCaseModal, setShowTestCaseModal] = useState(false);
+  const [newRunName, setNewRunName] = useState('');
+  const [newTestCaseName, setNewTestCaseName] = useState('');
+  const { toast } = useToast();
+  const [step, setStep] = useState('');
+const [expected, setExpected] = useState('');
+const [selectedAction, setSelectedAction] = useState('');
+
+
+    // Get consistent IDs regardless of property name
+  const projectId = selectedRelease?.ProjectID
+  const releaseId = selectedRelease?.ReleaseID 
+
+  // Fetch Runs when release changes
+  useEffect(() => {
+    const fetchRuns = async () => {
+      if (projectId && releaseId) {
+        try {
+          const data = await api.getRunsByReleaseId( projectId,releaseId);
+          setRuns(data.map((r) => ({ ...r, testCases: [], testCasesLoaded: false })));
+        } catch (error) {
+          toast({
+            title: 'Error fetching runs',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setRuns([]);
+        }
+      } else {
+        setRuns([]);
+      }
+      setTestCases([]);
+    };
+
+    fetchRuns();
+  }, [projectId,releaseId, toast]);
+
+  // Fetch Test Cases when run changes
+  useEffect(() => {
+    const fetchTestCases = async () => {
+      if (selectedRun?._id) {
+        try {
+          const data = await api.getTestCasesByRunId(selectedRun.RunID);
+          setTestCases(data);
+        } catch (error) {
+          toast({
+            title: 'Error fetching test cases',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setTestCases([]);
+        }
+      } else {
+        setTestCases([]);
+      }
+    };
+
+    fetchTestCases();
+  }, [selectedRun, toast]);
+
+  // Create new run
+  const handleCreateRun = async () => {
+   
+    if (!newRunName.trim() || !projectId || !releaseId) {
+      toast({
+        title: 'Debug',
+        description: `RunName: ${newRunName}, ProjectID: ${projectId}, ReleaseID: ${releaseId}`,
+      });
+      
+      return;
+    }
+
+    try {
+      await api.createRun(releaseId, { RunName: newRunName }, projectId);
+      console.log("TestData: ",releaseId, { RunName: newRunName },projectId);
+      toast({ title: 'Success', description: 'Run created successfully!' });
+      setNewRunName('');
+      setShowRunModal(false);
+
+      const data = await api.getRunsByReleaseId(releaseId,projectId);
+      setRuns(data.map((r) => ({ ...r, testCases: [], testCasesLoaded: false })));
+    } catch (error) {
+      toast({ title: 'Error creating run', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  // Create new test case
+ const handleCreateTestCase = async () => {
+  if (
+    !newTestCaseName.trim() ||
+    !step.trim() ||
+    !expected.trim() ||
+    !selectedAction ||
+    !selectedRun?.RunID
+  ) {
+    toast({
+      title: 'Error',
+      description: 'All fields are required',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  const testCaseData = {
+    TestCaseName: newTestCaseName,
+    RunID: selectedRun.RunID,
+    step,
+    expected,
+    actions: selectedAction,
+  };
+
+  try {
+    await api.createTestCase(selectedRun.RunID, testCaseData);
+    toast({ title: 'Success', description: 'Test case created successfully!' });
+
+    setNewTestCaseName('');
+    setStep('');
+    setExpected('');
+    setSelectedAction('');
+    setShowTestCaseModal(false);
+
+    const data = await api.getTestCasesByRunId(selectedRun.RunID);
+    setTestCases(data);
+  } catch (error) {
+    toast({
+      title: 'Error creating test case',
+      description: error.message,
+      variant: 'destructive',
+    });
+  }
+};
+
+
+  return (
+    <div className="p-2 md:p-2.5 scrollbar overflow-y-auto h-full" ref={panelRef}>
+      {/* Runs Section */}
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[11px] font-semibold text-white uppercase">Runs</h2>
+        <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+          <DialogTrigger asChild>
+            <Button size="xs" className="btn-primary text-[11px] px-1.5 py-0.5 h-auto leading-tight" disabled={!selectedRelease}>
+              + Add 
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="modal-content sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-white text-base">Create New Run</DialogTitle>
+              <DialogDescription className="text-sm text-gray-400">
+                Enter a name to create a new test run under the selected release.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2.5">
+              <Label htmlFor="runName" className="text-white text-[11px]">
+                Run Name
+              </Label>
+              <Input
+                id="runName"
+                value={newRunName}
+                onChange={(e) => setNewRunName(e.target.value)}
+                className="input-field mt-0.5 text-[11px]"
+                placeholder="Enter run name"
+                type="text"
+                required
+              />
+            </div>
+            <DialogFooter className="mt-3.5">
+              <Button onClick={() => setShowRunModal(false)} variant="outline" className="btn-secondary text-[11px] px-2 py-1 h-auto leading-tight">
+                Cancel
+              </Button>
+              <Button onClick={handleCreateRun} className="btn-primary text-[11px] px-2 py-1 h-auto leading-tight">
+                Create
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+     <div className="space-y-0.5 mb-3.5">
+  {selectedRelease ? (
+    runs.length > 0 ? (
+      runs.map((run) => (
+        <div
+          key={run.RunID}
+          className={`test-case-item text-[11px] py-1 px-1.5 ${selectedRun?.RunID === run.RunID ? 'active' : ''}`}
+          onClick={() => onRunSelect(run)}
+        >
+          <div className="font-medium truncate" title={run.RunName}>
+            {run.RunName}
+          </div>
+        </div>
+      ))
+    ) : (
+      <p className="text-[11px] text-gray-500">No runs for this release.</p>
+    )
+  ) : (
+    <p className="text-[11px] text-gray-500">Select a release to see runs.</p>
+  )}
+</div>
+
+
+      {/* Test Cases Section */}
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[11px] font-semibold text-white uppercase">Test Cases</h2>
+        <Dialog open={showTestCaseModal} onOpenChange={setShowTestCaseModal}>
+          <DialogTrigger asChild>
+            <Button size="xs" className="btn-primary text-[11px] px-1.5 py-0.5 h-auto leading-tight" disabled={!selectedRun}>
+              + Add
+            </Button>
+          </DialogTrigger>
+         <DialogContent className="modal-content sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-white text-base">Create Test Case</DialogTitle>
+              <DialogDescription className="text-sm text-gray-400">
+                Fill the details to create a new test case under the selected run.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2.5">
+              <Label className="text-white text-[11px]">Test Case Name</Label>
+              <Input value={newTestCaseName} onChange={(e) => setNewTestCaseName(e.target.value)} placeholder="Enter test case name" className="input-field text-[11px]" />
+
+              <Label className="text-white text-[11px]">Step</Label>
+              <Input value={step} onChange={(e) => setStep(e.target.value)} placeholder="Enter test step" className="input-field text-[11px]" />
+
+              <Label className="text-white text-[11px]">Expected Result</Label>
+              <Input value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="Enter expected result" className="input-field text-[11px]" />
+
+              <Label className="text-white text-[11px]">Action</Label>
+              <select value={selectedAction} onChange={(e) => setSelectedAction(e.target.value)} className="input-field w-full p-1 text-[11px] rounded bg-black border border-gray-600 text-white">
+                <option value="">Select action</option>
+                <option value="LAUNCHBROWSER">Launch Browser</option>
+                <option value="CLICK">Click</option>
+                <option value="ENTERTEXT">Enter Text</option>
+                <option value="SELECTDROPDOWN">Select Dropdown</option>
+                <option value="VERIFYTEXT">Verify Text</option>
+                <option value="NAVIGATETO">Navigate To</option>
+              </select>
+            </div>
+
+            <DialogFooter className="mt-3.5">
+              <Button onClick={() => setShowTestCaseModal(false)} variant="outline" className="btn-secondary text-[11px] px-2 py-1 h-auto leading-tight">Cancel</Button>
+              <Button onClick={handleCreateTestCase} className="btn-primary text-[11px] px-2 py-1 h-auto leading-tight">Create</Button>
+            </DialogFooter>
+          </DialogContent>
+
+                  </Dialog>
+                </div>
+
+      <div className="space-y-0.5">
+        {testCases.map((tc) => (
+          <div
+            key={tc.TestCaseID}
+            className={`test-case-item text-[11px] py-1 px-1.5 ${selectedTestCase?.TestCaseID === tc.TestCaseID ? 'active' : ''}`}
+            onClick={() => onTestCaseSelect(tc)}
+          >
+            <div className="font-medium truncate" title={tc.TestCaseName}>
+              {tc.TestCaseName}
+            </div>
+          </div>
+        ))}
+        {!selectedRun && <p className="text-[11px] text-gray-500">Select a run to see test cases.</p>}
+        {selectedRun && testCases.length === 0 && <p className="text-[11px] text-gray-500">No test cases for this run.</p>}
+      </div>
+    </div>
+  );
+};
+
+export default TestCaseExplorer;
+
+
+-----------------------------------------------------------------------------------------------------------------
+apply this code and give full code:
+import React, { useState, useEffect } from 'react';
+import { Plus, FolderPlus, ChevronRight, ChevronDown, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import * as api from '@/services/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const ProjectExplorer = ({ 
+  onProjectSelect, 
+  onReleaseSelect, 
+  onRunSelect,
+  selectedProject, 
+  selectedRelease,
+  selectedRun,
+  onNavigateToTestCases 
+}) => {
+  const [projects, setProjects] = useState([]);
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [currentProjectForModal, setCurrentProjectForModal] = useState(null);
+  const [currentReleaseForRun, setCurrentReleaseForRun] = useState(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newReleaseName, setNewReleaseName] = useState('');
+  const [newRunName, setNewRunName] = useState('');
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, type: null, item: null });
+  
+  const { toast } = useToast();
+
+  // Context menu handlers
+  const handleRightClick = (e, type, item) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY,
+      type,
+      item
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ show: false, x: 0, y: 0, type: null, item: null });
+  };
+
+  // Click outside to close context menu
+  useEffect(() => {
+    const handleClickOutside = () => closeContextMenu();
+    if (contextMenu.show) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu.show]);
+
+  const handleReleaseClick = (project, release) => {
+    const releaseData = {
+      _id: release.ReleaseID,
+      ReleaseID: release.ReleaseID,
+      ReleaseName: release.ReleaseName,
+      ProjectID: project.ProjectID
+    };
+    onReleaseSelect(releaseData);
+    onProjectSelect(releaseData);
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const data = await api.getProjects();
+      setProjects(data.map(p => ({ 
+        ...p, 
+        expanded: false, 
+        releases: [], 
+        releasesLoaded: false 
+      })));
+    } catch (error) {
+      toast({ title: "Error fetching projects", description: error.message, variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) {
+      toast({ title: "Error", description: "Project name is required", variant: "destructive" });
+      return;
+    }
+    try {
+      const projectData = { ProjectName: newProjectName };
+      await api.createProject(projectData);
+      toast({ title: "Success", description: "Project created successfully!" });
+      setNewProjectName('');
+      setShowNewItemModal(false);
+      fetchProjects(); 
+    } catch (error) {
+      toast({ title: "Error creating project", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const fetchReleasesForProject = async (projectId) => {
+    try {
+      const releases = await api.getReleasesByProjectId(projectId);
+      const releasesWithRuns = await Promise.all(
+        releases.map(async (release) => {
+          try {
+            const runs = await api.getRunsByReleaseId(projectId, release.ReleaseID);
+            return { ...release, runs: runs || [], runsLoaded: true, expanded: false };
+          } catch (error) {
+            return { ...release, runs: [], runsLoaded: false, expanded: false };
+          }
+        })
+      );
+      
+      setProjects(prevProjects =>
+        prevProjects.map(p =>
+          p.ProjectID === projectId
+            ? { ...p, releases: releasesWithRuns, releasesLoaded: true, expanded: !p.expanded }
+            : p
+        )
+      );
+    } catch (error) {
+      toast({ title: "Error fetching releases", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const toggleProjectExpansion = (projectId) => {
+    const project = projects.find(p => p.ProjectID === projectId);
+    
+    if (project && !project.releasesLoaded) {
+      fetchReleasesForProject(projectId);
+    } else {
+      setProjects(prevProjects => prevProjects.map(p => 
+        p.ProjectID === projectId ? { ...p, expanded: !p.expanded } : p
+      ));
+    }
+  };
+
+  const toggleReleaseExpansion = (projectId, releaseId) => {
+    setProjects(prevProjects =>
+      prevProjects.map(project =>
+        project.ProjectID === projectId
+          ? {
+              ...project,
+              releases: project.releases.map(release =>
+                release.ReleaseID === releaseId
+                  ? { ...release, expanded: !release.expanded }
+                  : release
+              )
+            }
+          : project
+      )
+    );
+  };
+  
+  const handleCreateRelease = async () => {
+    if (!newReleaseName.trim() || !currentProjectForModal) {
+      toast({ title: "Error", description: "Release name and project selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRelease(currentProjectForModal.ProjectID, { ReleaseName: newReleaseName });
+      toast({ title: "Success", description: `Release "${newReleaseName}" created for project "${currentProjectForModal.ProjectName}"!` });
+      setNewReleaseName('');
+      setShowReleaseModal(false);
+      fetchReleasesForProject(currentProjectForModal.ProjectID);
+      setProjects(prev => prev.map(p => p.ProjectID === currentProjectForModal.ProjectID ? {...p, expanded: true} : p));
+    } catch (error) {
+      toast({ title: "Error creating release", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateRun = async () => {
+    if (!newRunName.trim() || !currentReleaseForRun) {
+      toast({ title: "Error", description: "Run name and release selection are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await api.createRun({
+        RunName: newRunName,
+        ReleaseID: currentReleaseForRun.ReleaseID,
+        ProjectID: currentReleaseForRun.ProjectID
+      });
+      toast({ title: "Success", description: `Run "${newRunName}" created successfully!` });
+      setNewRunName('');
+      setShowRunModal(false);
+      
+      // Refresh runs for the release
+      fetchReleasesForProject(currentReleaseForRun.ProjectID);
+    } catch (error) {
+      toast({ title: "Error creating run", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const openReleaseModal = (project) => {
+    setCurrentProjectForModal(project);
+    setShowReleaseModal(true);
+    closeContextMenu();
+  };
+
+  const openRunModal = (project, release) => {
+    setCurrentReleaseForRun({ ...release, ProjectID: project.ProjectID });
+    setShowRunModal(true);
+    closeContextMenu();
+  };
+
+  const handleRunClick = (project, release, run) => {
+    const runData = {
+      _id: run.RunID,
+      RunID: run.RunID,
+      RunName: run.RunName,
+      ReleaseID: release.ReleaseID,
+      ProjectID: project.ProjectID
+    };
+    onRunSelect(runData);
+    onNavigateToTestCases(runData); // Navigate to TestCasesExplorer
+  };
+
+  return (
+    <div className="p-1.5 md:p-2 scrollbar overflow-y-auto h-full">
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[11px] md:text-xs font-semibold text-white uppercase">Explorer</h2>
+        <Dialog open={showNewItemModal} onOpenChange={setShowNewItemModal}>
+          <DialogTrigger asChild>
+            <button className="icon-button" title="New Item"><Plus className="w-3 h-3" /></button>
+          </DialogTrigger>
+          <DialogContent className="modal-content sm:max-w-md">
+            <DialogHeader><DialogTitle className="text-white text-sm">Add New Project</DialogTitle></DialogHeader>
+            <Tabs defaultValue="project" className="w-full">
+              <TabsContent value="project" className="pt-3">
+                <div className="space-y-2.5">
+                  <div>
+                    <Label htmlFor="projectName" className="text-white text-[11px] md:text-xs">Project Name</Label>
+                    <Input id="projectName" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} className="input-field mt-0.5" placeholder="Enter project name" />
+                  </div>
+                </div>
+                <DialogFooter className="mt-3.5">
+                  <Button onClick={handleCreateProject} className="btn-primary text-[11px] md:text-xs w-full">Create Project</Button>
+                </DialogFooter>
+              </TabsContent>
+            </Tabs>
+            <Button onClick={() => setShowNewItemModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs mt-3 w-full">Cancel</Button>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="space-y-0.5">
+        {projects.map((project) => (
+          <div key={project.ProjectID} className="fade-in">
+            <div 
+              className={`folder-item flex items-center justify-between rounded-sm ${selectedProject?._id === project._id ? 'bg-gray-700' : ''}`}
+              onContextMenu={(e) => handleRightClick(e, 'project', project)}
+            >
+              <div className="flex items-center space-x-1 flex-grow min-w-0" onClick={() => onProjectSelect(project)}>
+                <button onClick={(e) => { e.stopPropagation(); toggleProjectExpansion(project.ProjectID); }} className="icon-button p-0">
+                  {project.expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </button>
+                <FolderPlus className="w-3 h-3 text-[#007ACC] shrink-0" />
+                <span className="text-[11px] md:text-xs text-white truncate" title={project.ProjectID}>{project.ProjectID}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openReleaseModal(project); }} className="release-button p-0.5 h-auto text-[5px]">
+                + Add Release
+              </Button>
+            </div>
+            
+            {project.expanded && project.releasesLoaded && (
+              <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                {project.releases.length === 0 && <p className="text-[10px] md:text-xs text-gray-500 pl-1.5 py-0.5">No releases yet.</p>}
+                {project.releases.map((release) => (
+                  <div key={release.ReleaseID}>
+                    <div
+                      className={`folder-item flex items-center justify-between rounded-sm ${selectedRelease?._id === release._id ? 'selected' : ''}`}
+                      onClick={() => onReleaseSelect(project, release)}
+                      onContextMenu={(e) => handleRightClick(e, 'release', { project, release })}
+                    >
+                      <div className="flex items-center space-x-1 flex-grow min-w-0">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleReleaseExpansion(project.ProjectID, release.ReleaseID); }} 
+                          className="icon-button p-0"
+                        >
+                          {release.expanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                        </button>
+                        <span className="text-[11px] md:text-xs text-gray-300 truncate" title={release.ReleaseID}>{release.ReleaseID}</span>
+                      </div>
+                      <button className="icon-button p-0.5" title="Add Run">
+                        <Plus className="w-2.5 h-2.5" onClick={(e) => { e.stopPropagation(); openRunModal(project, release); }} />
+                      </button>
+                    </div>
+                    
+                    {release.expanded && release.runs && (
+                      <div className="ml-3.5 mt-0.5 space-y-0.5 slide-in">
+                        {release.runs.length === 0 && <p className="text-[10px] text-gray-500 pl-1.5 py-0.5">No runs yet.</p>}
+                        {release.runs.map((run) => (
+                          <div
+                            key={run.RunID}
+                            className={`folder-item flex items-center justify-between rounded-sm ${selectedRun?._id === run._id ? 'selected' : ''}`}
+                            onClick={() => handleRunClick(project, release, run)}
+                          >
+                            <span className="text-[10px] text-gray-400 truncate" title={run.RunName}>{run.RunName}</span>
+                            <button className="icon-button p-0.5" title="Run Test Cases">
+                              <Play className="w-2 h-2" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu.show && (
+        <div
+          className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 py-1"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'project' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openReleaseModal(contextMenu.item)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Release</span>
+            </button>
+          )}
+          {contextMenu.type === 'release' && (
+            <button
+              className="w-full px-3 py-1.5 text-left text-[11px] text-white hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => openRunModal(contextMenu.item.project, contextMenu.item.release)}
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Run</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Release Modal */}
+      <Dialog open={showReleaseModal} onOpenChange={setShowReleaseModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Release for {currentProjectForModal?.ProjectName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new Release Name.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="releaseName" className="text-white text-[11px] md:text-xs">Release Name</Label>
+              <Input id="releaseName" value={newReleaseName} onChange={(e) => setNewReleaseName(e.target.value)} className="input-field mt-0.5" placeholder="Enter release name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowReleaseModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRelease} className="btn-primary text-[11px] md:text-xs">Create Release</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Modal */}
+      <Dialog open={showRunModal} onOpenChange={setShowRunModal}>
+        <DialogContent className="modal-content sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-white text-sm">Create New Run for {currentReleaseForRun?.ReleaseName}</DialogTitle></DialogHeader>
+          <DialogDescription className="text-sm text-gray-600">
+            Enter a name to create a new test run.
+          </DialogDescription>
+          <div className="space-y-2.5">
+            <div>
+              <Label htmlFor="runName" className="text-white text-[11px] md:text-xs">Run Name</Label>
+              <Input id="runName" value={newRunName} onChange={(e) => setNewRunName(e.target.value)} className="input-field mt-0.5" placeholder="Enter run name" />
+            </div>
+          </div>
+          <DialogFooter className="mt-3.5">
+            <Button onClick={() => setShowRunModal(false)} variant="outline" className="btn-secondary text-[11px] md:text-xs">Cancel</Button>
+            <Button onClick={handleCreateRun} className="btn-primary text-[11px] md:text-xs">Create Run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ProjectExplorer
+
+

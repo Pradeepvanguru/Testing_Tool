@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Plus, FolderPlus, ChevronRight, ChevronDown, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,11 +31,6 @@ const handleReleaseClick = (project, release) => {
   onProjectSelect(releaseData);
 };
 
-// onProjectSelect(projectData);
-// localStorage.setItem('selectedProject', JSON.stringify(projectData));
-
-// onReleaseSelect(releaseData);
-// localStorage.setItem('selectedRelease', JSON.stringify(releaseData));
 
 
 
@@ -128,9 +122,9 @@ const handleReleaseClick = (project, release) => {
           <DialogContent className="modal-content sm:max-w-md">
             <DialogHeader><DialogTitle className="text-white text-sm">Add New Project</DialogTitle></DialogHeader>
             <Tabs defaultValue="project" className="w-full">
-              <TabsList className="grid w-full grid-cols-1">
+              {/* <TabsList className="grid w-full grid-cols-1">
                 <TabsTrigger value="project" className="text-xs">New Project</TabsTrigger>
-              </TabsList>
+              </TabsList> */}
               <TabsContent value="project" className="pt-3">
                 <div className="space-y-2.5">
                   <div>
@@ -159,7 +153,7 @@ const handleReleaseClick = (project, release) => {
                 <FolderPlus className="w-3 h-3 text-[#007ACC] shrink-0" />
                 <span className="text-[11px] md:text-xs text-white truncate" title={project.ProjectName}>{project.ProjectName}</span>
               </div>
-              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openReleaseModal(project); }} className="release-button p-0.5 h-auto text-[10px]">
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openReleaseModal(project); }} className="release-button p-0.5 h-auto text-[5px] ">
                 + Add Release
               </Button>
             </div>
@@ -208,4 +202,3 @@ const handleReleaseClick = (project, release) => {
 };
 
 export default ProjectExplorer;
-
